@@ -140,6 +140,8 @@ class VMX_vcp(vrnetlab.VM):
         self.wait_write(self.password, 'New password:')
         self.wait_write(self.password, 'Retype new password:')
         self.wait_write("set interfaces fxp0 unit 0 family inet address 10.0.0.15/24")
+        self.wait_write("delete interfaces fxp0 unit 0 family inet dhcp")
+        self.wait_write("delete system processes dhcp-service")
         self.wait_write("commit")
         self.wait_write("exit")
 
@@ -189,7 +191,7 @@ class VMX_vfpc(vrnetlab.VM):
         res.extend(["-netdev",
                     "tap,ifname=vfpc-int,id=vfpc-int,script=no,downscript=no"])
 
-        if self.version in ('15.1F6.9', '16.1R2.11'):
+        if self.version in ('15.1F6.9', '16.1R2.11', '17.2R1.13'):
             # dummy interface for some vMX versions - not sure why vFPC wants
             # it but without it we get a misalignment
             res.extend(["-device", "virtio-net-pci,netdev=dummy,mac=%s" %

@@ -51,6 +51,7 @@ class VM:
         self.password = password
 
         self.num = num
+        self.image = disk_image
 
         self.running = False
         self.spins = 0
@@ -65,7 +66,11 @@ class VM:
         self.nics_per_pci_bus = 26 # tested to work with XRv
         self.smbios = []
         overlay_disk_image = re.sub(r'(\.[^.]+$)', r'-overlay\1', disk_image)
-        run_command(["qemu-img", "create", "-f", "qcow2", "-b", disk_image, overlay_disk_image])
+
+        if not os.path.exists(overlay_disk_image):
+            self.logger.debug("Creating overlay disk image")
+            run_command(["qemu-img", "create", "-f", "qcow2", "-b", disk_image, overlay_disk_image])
+
         self.qemu_args = ["qemu-system-x86_64", "-display", "none", "-machine", "pc" ]
         self.qemu_args.extend(["-monitor", "tcp:0.0.0.0:40%02d,server,nowait" % self.num])
         self.qemu_args.extend(["-m", str(ram),
@@ -149,10 +154,15 @@ class VM:
         res = []
         # mgmt interface is special - we use qemu user mode network
         res.append("-device")
-        res.append(self.nic_type + ",netdev=p%(i)02d,mac=%(mac)s"
-                              % { 'i': 0, 'mac': gen_mac(0) })
+        # vEOS-lab requires its Ma1 interface to be the first in the bus, so let's hardcode it
+        if 'vEOS-lab' in self.image:
+            res.append(self.nic_type + ",netdev=p%(i)02d,mac=%(mac)s,bus=pci.1,addr=0x2"
+                       % { 'i': 0, 'mac': gen_mac(0) })
+        else:
+            res.append(self.nic_type + ",netdev=p%(i)02d,mac=%(mac)s"
+                       % { 'i': 0, 'mac': gen_mac(0) })
         res.append("-netdev")
-        res.append("user,id=p%(i)02d,net=10.0.0.0/24,tftp=/tftpboot,hostfwd=tcp::2022-10.0.0.15:22,hostfwd=udp::2161-10.0.0.15:161,hostfwd=tcp::2830-10.0.0.15:830" % { 'i': 0 })
+        res.append("user,id=p%(i)02d,net=10.0.0.0/24,tftp=/tftpboot,hostfwd=tcp::2022-10.0.0.15:22,hostfwd=udp::2161-10.0.0.15:161,hostfwd=tcp::2830-10.0.0.15:830,hostfwd=tcp::2080-10.0.0.15:80,hostfwd=tcp::2443-10.0.0.15:443" % { 'i': 0 })
 
         return res
 
@@ -161,7 +171,12 @@ class VM:
         """ Generate qemu args for the normal traffic carrying interface(s)
         """
         res = []
-        for i in range(1, self.num_nics+1):
+        # vEOS-lab requires its Ma1 interface to be the first in the bus, so start normal nics at 2
+        if 'vEOS-lab' in self.image:
+            range_start = 2
+        else:
+            range_start = 1
+        for i in range(range_start, self.num_nics+1):
             # calc which PCI bus we are on and the local add on that PCI bus
             pci_bus = math.floor(i/self.nics_per_pci_bus) + 1
             addr = (i % self.nics_per_pci_bus) + 1
@@ -298,6 +313,8 @@ class VR:
         run_command(["socat", "TCP-LISTEN:22,fork", "TCP:127.0.0.1:2022"], background=True)
         run_command(["socat", "UDP-LISTEN:161,fork", "UDP:127.0.0.1:2161"], background=True)
         run_command(["socat", "TCP-LISTEN:830,fork", "TCP:127.0.0.1:2830"], background=True)
+        run_command(["socat", "TCP-LISTEN:80,fork", "TCP:127.0.0.1:2080"], background=True)
+        run_command(["socat", "TCP-LISTEN:443,fork", "TCP:127.0.0.1:2443"], background=True)
 
         started = False
         while True:

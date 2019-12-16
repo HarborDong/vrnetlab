@@ -64,7 +64,7 @@ def uuid_rev_part(part):
 
 
 class SROS_vm(vrnetlab.VM):
-    def __init__(self, username, password, num=0):
+    def __init__(self, username, password, num=0, ram=6144):
         super(SROS_vm, self).__init__(username, password, disk_image = "/sros.qcow2", num=num)
 
         self.uuid = "00000000-0000-0000-0000-000000000000"
@@ -123,7 +123,12 @@ class SROS_vm(vrnetlab.VM):
             return
 
         lic_file = open("/tftpboot/license.txt", "r")
-        license = lic_file.read()
+        license = ""
+        for line in lic_file.readlines():
+            # ignore comments in license file
+            if line.startswith('#'):
+                continue
+            license += line
         lic_file.close()
         try:
             uuid_input = license.split(" ")[0]
@@ -195,7 +200,7 @@ class SROS_cp(SROS_vm):
         self.num_lc = num_lc
 
         self.num_nics = 0
-        self.smbios = ["type=1,product=TIMOS:address=10.0.0.15/24@active license-file=tftp://10.0.0.2/license.txt chassis=XRS-20 slot=A card=cpm-x20"]
+        self.smbios = ["type=1,product=TIMOS:address=10.0.0.15/24@active license-file=tftp://10.0.0.2/license.txt chassis=XRS-20 chassis-topology=XRS-40 slot=A sfm=sfm-x20-b card=cpm-x20"]
 
 
     def start(self):
@@ -235,7 +240,7 @@ class SROS_cp(SROS_vm):
         self.wait_write("configure system security profile \"administrative\" netconf base-op-authorization lock")
 
         # configure SFMs
-        for i in range(1, 16):
+        for i in range(1, 17):
             self.wait_write("configure sfm {} sfm-type sfm-x20-b".format(i))
 
         # configure line card & MDAs
@@ -257,7 +262,7 @@ class SROS_lc(SROS_vm):
         self.slot = slot
 
         self.num_nics = 6
-        self.smbios = ["type=1,product=TIMOS:chassis=XRS-20 slot={} card=xcm-x20 mda/1=cx20-10g-sfp".format(slot)]
+        self.smbios = ["type=1,product=TIMOS:chassis=XRS-20 chassis-topology=XRS-40 slot={} sfm=sfm-x20-b card=xcm-x20 mda/1=cx20-10g-sfp".format(slot)]
 
 
 
